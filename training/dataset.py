@@ -16,6 +16,10 @@ class MakeupDataset(Dataset):
             self.makeup_names = [name.strip() for name in f.readlines()]
         with open(os.path.join(config.DATA.PATH, 'non-makeup.txt'), 'r') as f:
             self.non_makeup_names = [name.strip() for name in f.readlines()]
+
+        self.non_makeup_names = [name for name in self.non_makeup_names if os.path.exists(os.path.join(self.root, 'lms', f'{os.path.splitext(name)[0]}.npy'))]
+        self.makeup_names = [name for name in self.makeup_names if os.path.exists(os.path.join(self.root, 'lms', f'{os.path.splitext(name)[0]}.npy'))]
+
         self.preprocessor = PreProcess(config, need_parser=False)
         self.img_size = config.DATA.IMG_SIZE
 

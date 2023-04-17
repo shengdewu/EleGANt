@@ -5,6 +5,9 @@ import torch.nn.functional as F
 from .modules.histogram_matching import histogram_matching
 from .modules.pseudo_gt import fine_align, expand_area, mask_blur
 
+from .color_convert import rgb2hsv_torch, hsv2rgb_torch
+from .modules.histogram_matching_torch import histogram_matching_channel
+
 
 class GANLoss(nn.Module):
     """Define different GAN objectives.
@@ -112,6 +115,68 @@ def generate_pgt(image_s, image_r, mask_s, mask_r, lms_s, lms_r, margins, blend_
         return pgt
 
 
+def masked_hv_match(image_s, image_r, mask_s, mask_r):
+    '''
+    image: (3, h, w)
+    mask: (1, h, w)
+    '''
+    index_tmp = torch.nonzero(mask_s)
+    x_A_index = index_tmp[:, 1]
+    y_A_index = index_tmp[:, 2]
+    index_tmp = torch.nonzero(mask_r)
+    x_B_index = index_tmp[:, 1]
+    y_B_index = index_tmp[:, 2]
+
+    image_s = image_s * 255 # [0, 1] -> [0, 255]
+    image_r = image_r * 255
+
+    source_masked = image_s * mask_s
+    target_masked = image_r * mask_r
+
+    source_match = [histogram_matching_channel(
+        source_masked[i], target_masked[i],
+        [x_A_index, y_A_index, x_B_index, y_B_index]).to(image_s.device).unsqueeze(0) for i in range(2)]
+
+    source_match.append(source_masked[2].unsqueeze(0))
+
+    return torch.cat(source_match, dim=0) / 255  # [0, 255] -> [0, 1]
+
+
+def generate_pgt_hsv(image_s, image_r, mask_s, mask_r, lms_s, lms_r, margins, blend_alphas, img_size=None):
+    """
+    input_data: (3, h, w)
+    mask: (c, h, w), lip, skin, left eye, right eye
+    """
+    if img_size is None:
+        img_size = image_s.shape[1]
+
+    image_s_hsl = rgb2hsv_torch(de_norm(image_s).unsqueeze(0))[0]
+    image_r_hsl = rgb2hsv_torch(de_norm(image_r).unsqueeze(0))[0]
+
+    pgt = image_s_hsl.clone()
+
+    # skin match
+    skin_match = masked_hv_match(pgt, image_r_hsl, mask_s[1:2], mask_r[1:2])
+    pgt = (1 - mask_s[1:2]) * pgt + mask_s[1:2] * skin_match
+
+    # lip match
+    lip_match = masked_hv_match(pgt, image_r_hsl, mask_s[0:1], mask_r[0:1])
+    pgt = (1 - mask_s[0:1]) * pgt + mask_s[0:1] * lip_match
+
+    # eye match
+    mask_s_eye = expand_area(mask_s[2:4].sum(dim=0, keepdim=True), margins['eye']) * mask_s[1:2]
+    mask_r_eye = expand_area(mask_r[2:4].sum(dim=0, keepdim=True), margins['eye']) * mask_r[1:2]
+    eye_match = masked_hv_match(pgt, image_r_hsl, mask_s_eye, mask_r_eye)
+    mask_s_eye_blur = mask_blur(mask_s_eye, blur_size=5, mode='valid')
+    pgt = (1 - mask_s_eye_blur) * pgt + mask_s_eye_blur * eye_match
+
+    pgt = norm(hsv2rgb_torch(pgt.unsqueeze(0)))[0]
+
+    # tps align
+    pgt = fine_align(img_size, lms_r, lms_s, image_r, pgt, mask_r, mask_s, margins, blend_alphas)
+    return pgt
+
+
 class LinearAnnealingFn():
     """
     define the linear annealing function with milestones
@@ -149,7 +214,7 @@ class ComposePGT(nn.Module):
         pgts = []
         for source, target, mask_src, mask_tar, lms_src, lms_tar in\
             zip(sources, targets, mask_srcs, mask_tars, lms_srcs, lms_tars):
-            pgt = generate_pgt(source, target, mask_src, mask_tar, lms_src, lms_tar, 
+            pgt = generate_pgt_hsv(source, target, mask_src, mask_tar, lms_src, lms_tar,
                                self.margins, self.blend_alphas)
             pgts.append(pgt)
         pgts = torch.stack(pgts, dim=0)
@@ -182,8 +247,9 @@ class AnnealingComposePGT(nn.Module):
         pgts = []
         for source, target, mask_src, mask_tar, lms_src, lms_tar in\
             zip(sources, targets, mask_srcs, mask_tars, lms_srcs, lms_tars):
-            pgt = generate_pgt(source, target, mask_src, mask_tar, lms_src, lms_tar,
+            pgt = generate_pgt_hsv(source, target, mask_src, mask_tar, lms_src, lms_tar,
                                self.margins, self.blend_alphas)
+
             pgts.append(pgt)
         pgts = torch.stack(pgts, dim=0)
         return pgts   
