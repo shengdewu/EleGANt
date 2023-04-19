@@ -328,7 +328,7 @@ class Solver():
             loss_tmp['D-A-loss'] = np.mean(losses_D_A)
             loss_tmp['D-B-loss'] = np.mean(losses_D_B)
             self.log_loss(loss_tmp)
-            self.plot_loss()
+            # self.plot_loss()
 
             # Decay learning rate
             self.g_scheduler.step()
