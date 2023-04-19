@@ -26,7 +26,7 @@ def main(config, args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("argument for training")
     parser.add_argument("--name", type=str, default='elegant')
-    parser.add_argument("--save_path", type=str, default='results', help="path to save model")
+    parser.add_argument("--save_path", type=str, default='/mnt/sda1/train.output/makeup.output/elegant-test', help="path to save model")
     parser.add_argument("--load_folder", type=str, help="path to load model", 
                         default=None)
     parser.add_argument("--keepon", default=False, action="store_true", help='keep on training')

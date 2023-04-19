@@ -192,7 +192,7 @@ class Inference:
         source_input, face, crop_face = self.preprocess(source)
         reference_input, _, _ = self.preprocess(reference)
         if not (source_input and reference_input):
-            return None
+            return None, None
 
         #source_sample = self.generate_source_sample(source_input)
         #reference_samples = [self.generate_reference_sample(reference_input)]
@@ -202,9 +202,9 @@ class Inference:
         result = self.solver.test(*source_input, *reference_input)
         
         if not postprocess:
-            return result
+            return result, crop_face
         else:
-            return self.postprocess(source, crop_face, result)
+            return self.postprocess(source, crop_face, result), crop_face
 
     def joint_transfer(self, source: Image, reference_lip: Image, reference_skin: Image,
                        reference_eye: Image, postprocess=True):
