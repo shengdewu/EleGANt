@@ -214,7 +214,7 @@ class ComposePGT(nn.Module):
         pgts = []
         for source, target, mask_src, mask_tar, lms_src, lms_tar in\
             zip(sources, targets, mask_srcs, mask_tars, lms_srcs, lms_tars):
-            pgt = generate_pgt_hsv(source, target, mask_src, mask_tar, lms_src, lms_tar,
+            pgt = generate_pgt(source, target, mask_src, mask_tar, lms_src, lms_tar,
                                self.margins, self.blend_alphas)
             pgts.append(pgt)
         pgts = torch.stack(pgts, dim=0)
@@ -247,7 +247,7 @@ class AnnealingComposePGT(nn.Module):
         pgts = []
         for source, target, mask_src, mask_tar, lms_src, lms_tar in\
             zip(sources, targets, mask_srcs, mask_tars, lms_srcs, lms_tars):
-            pgt = generate_pgt_hsv(source, target, mask_src, mask_tar, lms_src, lms_tar,
+            pgt = generate_pgt(source, target, mask_src, mask_tar, lms_src, lms_tar,
                                self.margins, self.blend_alphas)
 
             pgts.append(pgt)
