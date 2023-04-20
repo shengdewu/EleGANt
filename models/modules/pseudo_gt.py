@@ -144,5 +144,38 @@ def fine_align(img_size, lms_r, lms_s, image_r, image_s, mask_r, mask_s, margins
     return image_s
 
 
+def fine_align_no_face(img_size, lms_r, lms_s, image_r, image_s, mask_r, mask_s, margins, blend_alphas):
+    '''
+    image: (C, H, W), lms: (K, 2)
+    mask: (C, H, W), lip, face, left eye, right eye
+    margins: dictionary, blend_alphas: dictionary
+    '''
+    # lip align
+    mask_s_lip = expand_area(mask_s[0:1], margins['lip'])
+    mask_r_lip = expand_area(mask_r[0:1], margins['lip'])
+    image_s = tps_blend(blend_alphas['lip'], img_size, lms_r[48:], lms_s[48:], image_r, image_s,
+                        mask_r_lip, mask_s_lip, mask_s[0:1], blur_size=3)
+
+    # left eye align
+    mask_s_eye = expand_area(mask_s[2:3], margins['eye'])
+    mask_r_eye = expand_area(mask_r[2:3], margins['eye']) * mask_r[1:2]
+    image_s = tps_blend(blend_alphas['eye'], img_size,
+                        torch.cat((lms_r[14:17], lms_r[22:27], lms_r[27:31], lms_r[42:48]), dim=0),
+                        torch.cat((lms_s[14:17], lms_s[22:27], lms_s[27:31], lms_s[42:48]), dim=0),
+                        image_r, image_s, mask_r_eye, mask_s_eye, mask_s[1:2],
+                        blur_size=5, sample_mode='nearest')
+
+    # right eye align
+    mask_s_eye = expand_area(mask_s[3:4], margins['eye'])
+    mask_r_eye = expand_area(mask_r[3:4], margins['eye']) * mask_r[1:2]
+    image_s = tps_blend(blend_alphas['eye'], img_size,
+                        torch.cat((lms_r[0:3], lms_r[17:22], lms_r[27:31], lms_r[36:42]), dim=0),
+                        torch.cat((lms_s[0:3], lms_s[17:22], lms_s[27:31], lms_s[36:42]), dim=0),
+                        image_r, image_s, mask_r_eye, mask_s_eye, mask_s[1:2],
+                        blur_size=5, sample_mode='nearest')
+
+    return image_s
+
+
 if __name__ == "__main__":
     pass

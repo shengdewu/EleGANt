@@ -74,6 +74,7 @@ _C.PREPROCESS.LANDMARK_POINTS = 68
 
 # Pseudo ground truth
 _C.PGT = CfgNode()
+_C.PGT.NO_FACE = True
 _C.PGT.EYE_MARGIN = 12
 _C.PGT.LIP_MARGIN = 4
 _C.PGT.ANNEALING = True
