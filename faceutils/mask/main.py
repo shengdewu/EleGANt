@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 from PIL import Image
 import torch
+import torch.nn.functional
 import torchvision.transforms as transforms
 
 from .model import BiSeNet
@@ -26,8 +27,7 @@ class FaceParser:
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
 
-
-    def parse(self, image: Image):
+    def parse(self, image: np.ndarray):
         assert image.shape[:2] == (512, 512)
         with torch.no_grad():
             image = self.to_tensor(image).to(self.device)
@@ -36,4 +36,3 @@ class FaceParser:
             parsing = out.squeeze(0).argmax(0)
         parsing = torch.nn.functional.embedding(parsing, self.dic)
         return parsing.float().squeeze(2)
-
