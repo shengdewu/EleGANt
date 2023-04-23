@@ -265,7 +265,7 @@ class Solver():
                     g_B_loss_adv = self.criterionGAN(pred_fake, True)
 
                     # Makeup loss
-                    g_A_loss_pgt = 0;
+                    g_A_loss_pgt = 0
                     g_B_loss_pgt = 0
 
                     g_A_lip_loss_pgt = self.criterionPGT(fake_A, pgt_A, mask_s_full[:, 0:1]) * self.lambda_lip
@@ -326,7 +326,8 @@ class Solver():
                     loss_tmp['G-loss-img-rec'] += (g_loss_rec_A + g_loss_rec_B).item() * 0.5
                     loss_tmp['G-loss-vgg-rec'] += (g_loss_A_vgg + g_loss_B_vgg).item() * 0.5
                     loss_tmp['G-loss-rec'] += loss_rec.item()
-                    loss_tmp['G-loss-skin-pgt'] += (g_A_skin_loss_pgt + g_B_skin_loss_pgt).item()
+                    if not self.no_face:
+                        loss_tmp['G-loss-skin-pgt'] += (g_A_skin_loss_pgt + g_B_skin_loss_pgt).item()
                     loss_tmp['G-loss-eye-pgt'] += (g_A_eye_loss_pgt + g_B_eye_loss_pgt).item()
                     loss_tmp['G-loss-lip-pgt'] += (g_A_lip_loss_pgt + g_B_lip_loss_pgt).item()
                     loss_tmp['G-loss-pgt'] += (g_A_loss_pgt + g_B_loss_pgt).item()
