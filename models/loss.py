@@ -48,7 +48,7 @@ class GANLoss(nn.Module):
         else:
             target_tensor = self.fake_label
         target_tensor = target_tensor.expand_as(prediction).to(prediction.device)
-        
+
         loss = self.loss(prediction, target_tensor)
         return loss
 
@@ -56,9 +56,11 @@ class GANLoss(nn.Module):
 def norm(x: torch.Tensor):
     return x * 2 - 1
 
+
 def de_norm(x: torch.Tensor):
     out = (x + 1) / 2
     return out.clamp(0, 1)
+
 
 def masked_his_match(image_s, image_r, mask_s, mask_r):
     '''
@@ -72,47 +74,47 @@ def masked_his_match(image_s, image_r, mask_s, mask_r):
     x_B_index = index_tmp[:, 1]
     y_B_index = index_tmp[:, 2]
 
-    image_s = (de_norm(image_s) * 255) #[-1, 1] -> [0, 255]
+    image_s = (de_norm(image_s) * 255)  # [-1, 1] -> [0, 255]
     image_r = (de_norm(image_r) * 255)
-    
+
     source_masked = image_s * mask_s
     target_masked = image_r * mask_r
-    
+
     source_match = histogram_matching(
-                source_masked, target_masked,
-                [x_A_index, y_A_index, x_B_index, y_B_index])
+        source_masked, target_masked,
+        [x_A_index, y_A_index, x_B_index, y_B_index])
     source_match = source_match.to(image_s.device)
-    
-    return norm(source_match / 255) #[0, 255] -> [-1, 1]
+
+    return norm(source_match / 255)  # [0, 255] -> [-1, 1]
 
 
 def generate_pgt(image_s, image_r, mask_s, mask_r, lms_s, lms_r, margins, blend_alphas, img_size=None):
-        """
-        input_data: (3, h, w)
-        mask: (c, h, w), lip, skin, left eye, right eye
-        """
-        if img_size is None:
-            img_size = image_s.shape[1]
-        pgt = image_s.detach().clone()
+    """
+    input_data: (3, h, w)
+    mask: (c, h, w), lip, skin, left eye, right eye
+    """
+    if img_size is None:
+        img_size = image_s.shape[1]
+    pgt = image_s.detach().clone()
 
-        # skin match
-        skin_match = masked_his_match(image_s, image_r, mask_s[1:2], mask_r[1:2])
-        pgt = (1 - mask_s[1:2]) * pgt + mask_s[1:2] * skin_match
+    # skin match
+    skin_match = masked_his_match(image_s, image_r, mask_s[1:2], mask_r[1:2])
+    pgt = (1 - mask_s[1:2]) * pgt + mask_s[1:2] * skin_match
 
-        # lip match
-        lip_match = masked_his_match(image_s, image_r, mask_s[0:1], mask_r[0:1])
-        pgt = (1 - mask_s[0:1]) * pgt + mask_s[0:1] * lip_match
+    # lip match
+    lip_match = masked_his_match(image_s, image_r, mask_s[0:1], mask_r[0:1])
+    pgt = (1 - mask_s[0:1]) * pgt + mask_s[0:1] * lip_match
 
-        # eye match
-        mask_s_eye = expand_area(mask_s[2:4].sum(dim=0, keepdim=True), margins['eye']) * mask_s[1:2]
-        mask_r_eye = expand_area(mask_r[2:4].sum(dim=0, keepdim=True), margins['eye']) * mask_r[1:2]
-        eye_match = masked_his_match(image_s, image_r, mask_s_eye, mask_r_eye)
-        mask_s_eye_blur = mask_blur(mask_s_eye, blur_size=5, mode='valid')
-        pgt = (1 - mask_s_eye_blur) * pgt + mask_s_eye_blur * eye_match
+    # eye match
+    mask_s_eye = expand_area(mask_s[2:4].sum(dim=0, keepdim=True), margins['eye']) * mask_s[1:2]
+    mask_r_eye = expand_area(mask_r[2:4].sum(dim=0, keepdim=True), margins['eye']) * mask_r[1:2]
+    eye_match = masked_his_match(image_s, image_r, mask_s_eye, mask_r_eye)
+    mask_s_eye_blur = mask_blur(mask_s_eye, blur_size=5, mode='valid')
+    pgt = (1 - mask_s_eye_blur) * pgt + mask_s_eye_blur * eye_match
 
-        # tps align
-        pgt = fine_align(img_size, lms_r, lms_s, image_r, pgt, mask_r, mask_s, margins, blend_alphas)
-        return pgt
+    # tps align
+    pgt = fine_align(img_size, lms_r, lms_s, image_r, pgt, mask_r, mask_s, margins, blend_alphas)
+    return pgt
 
 
 def masked_hv_match(image_s, image_r, mask_s, mask_r):
@@ -127,7 +129,7 @@ def masked_hv_match(image_s, image_r, mask_s, mask_r):
     x_B_index = index_tmp[:, 1]
     y_B_index = index_tmp[:, 2]
 
-    image_s = image_s * 255 # [0, 1] -> [0, 255]
+    image_s = image_s * 255  # [0, 1] -> [0, 255]
     image_r = image_r * 255
 
     source_masked = image_s * mask_s
@@ -181,22 +183,23 @@ class LinearAnnealingFn():
     """
     define the linear annealing function with milestones
     """
+
     def __init__(self, milestones, f_values):
         assert len(milestones) == len(f_values)
         self.milestones = milestones
         self.f_values = f_values
-        
-    def __call__(self, t:int):
+
+    def __call__(self, t: int):
         if t < self.milestones[0]:
             return self.f_values[0]
         elif t >= self.milestones[-1]:
             return self.f_values[-1]
         else:
             for r in range(len(self.milestones) - 1):
-                if self.milestones[r] <= t < self.milestones[r+1]:
-                    return ((t - self.milestones[r]) * self.f_values[r+1] \
-                            + (self.milestones[r+1] - t) * self.f_values[r]) \
-                            / (self.milestones[r+1] - self.milestones[r])
+                if self.milestones[r] <= t < self.milestones[r + 1]:
+                    return ((t - self.milestones[r]) * self.f_values[r + 1] \
+                            + (self.milestones[r + 1] - t) * self.f_values[r]) \
+                           / (self.milestones[r + 1] - self.milestones[r])
 
 
 class ComposePGT(nn.Module):
@@ -204,34 +207,35 @@ class ComposePGT(nn.Module):
         super(ComposePGT, self).__init__()
         self.margins = margins
         self.blend_alphas = {
-            'skin':skin_alpha,
-            'eye':eye_alpha,
-            'lip':lip_alpha
+            'skin': skin_alpha,
+            'eye': eye_alpha,
+            'lip': lip_alpha
         }
 
     @torch.no_grad()
     def forward(self, sources, targets, mask_srcs, mask_tars, lms_srcs, lms_tars):
         pgts = []
-        for source, target, mask_src, mask_tar, lms_src, lms_tar in\
-            zip(sources, targets, mask_srcs, mask_tars, lms_srcs, lms_tars):
+        for source, target, mask_src, mask_tar, lms_src, lms_tar in \
+                zip(sources, targets, mask_srcs, mask_tars, lms_srcs, lms_tars):
             pgt = generate_pgt(source, target, mask_src, mask_tar, lms_src, lms_tar,
                                self.margins, self.blend_alphas)
             pgts.append(pgt)
         pgts = torch.stack(pgts, dim=0)
-        return pgts   
+        return pgts
+
 
 class AnnealingComposePGT(nn.Module):
     def __init__(self, margins,
-            skin_alpha_milestones, skin_alpha_values,
-            eye_alpha_milestones, eye_alpha_values,
-            lip_alpha_milestones, lip_alpha_values
-        ):
+                 skin_alpha_milestones, skin_alpha_values,
+                 eye_alpha_milestones, eye_alpha_values,
+                 lip_alpha_milestones, lip_alpha_values
+                 ):
         super(AnnealingComposePGT, self).__init__()
         self.margins = margins
         self.skin_alpha_fn = LinearAnnealingFn(skin_alpha_milestones, skin_alpha_values)
         self.eye_alpha_fn = LinearAnnealingFn(eye_alpha_milestones, eye_alpha_values)
         self.lip_alpha_fn = LinearAnnealingFn(lip_alpha_milestones, lip_alpha_values)
-        
+
         self.t = 0
         self.blend_alphas = {}
         self.step()
@@ -245,20 +249,21 @@ class AnnealingComposePGT(nn.Module):
     @torch.no_grad()
     def forward(self, sources, targets, mask_srcs, mask_tars, lms_srcs, lms_tars):
         pgts = []
-        for source, target, mask_src, mask_tar, lms_src, lms_tar in\
-            zip(sources, targets, mask_srcs, mask_tars, lms_srcs, lms_tars):
+        for source, target, mask_src, mask_tar, lms_src, lms_tar in \
+                zip(sources, targets, mask_srcs, mask_tars, lms_srcs, lms_tars):
             pgt = generate_pgt(source, target, mask_src, mask_tar, lms_src, lms_tar,
                                self.margins, self.blend_alphas)
 
             pgts.append(pgt)
         pgts = torch.stack(pgts, dim=0)
-        return pgts   
+        return pgts
 
 
 class MakeupLoss(nn.Module):
     """
     Define the makeup loss w.r.t pseudo ground truth
     """
+
     def __init__(self):
         super(MakeupLoss, self).__init__()
 
