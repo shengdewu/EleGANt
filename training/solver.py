@@ -289,6 +289,13 @@ class Solver():
                         g_B_skin_loss_pgt = self.criterionPGT(fake_B, pgt_B, mask_r_skin) * self.lambda_skin
                         g_A_loss_pgt += g_A_skin_loss_pgt
                         g_B_loss_pgt += g_B_skin_loss_pgt
+                    else:
+                        mask_s_skin = mask_s_full[:, 1:2] * (1 - mask_s_eye)
+                        mask_r_skin = mask_r_full[:, 1:2] * (1 - mask_r_eye)
+                        g_A_skin_loss_pgt = self.criterionPGT(fake_A, image_s, mask_s_skin) * self.lambda_skin
+                        g_B_skin_loss_pgt = self.criterionPGT(fake_B, image_r, mask_r_skin) * self.lambda_skin
+                        g_A_loss_pgt += g_A_skin_loss_pgt
+                        g_B_loss_pgt += g_B_skin_loss_pgt
 
                     # cycle loss
                     rec_A = self.G(fake_A, image_s, mask_s, mask_s, diff_s, diff_s, lms_s, lms_s)
