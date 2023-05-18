@@ -102,7 +102,7 @@ class Main:
         reference_input, _, _ = self.process(imgB)
 
         if not (source_input and reference_input):
-            return None
+            return None, None
 
         source_mask = source_input[1]
         source_sample = self.prepare_input(*source_input, no_face=False)

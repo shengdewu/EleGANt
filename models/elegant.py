@@ -214,29 +214,32 @@ class Generator(nn.ModuleDict):
             fea_out.append(fea_trans)
         return torch.cat(fea_out, dim=0)
 
-    def generate_partial_mask(self, source_mask, mask_area='full', saturation=1.0):
+    def generate_partial_mask(self, source_mask, mask_area='full', saturation=1.0, eyeblur=None):
         """
         source_mask: (C, H, W), lip, face, left eye, right eye
         return: apply_mask: (1, H, W)
         """
+        if eyeblur is None:
+            eyeblur = {'margin': 12, 'blur_size': 7}
+
         assert mask_area in ['full', 'skin', 'lip', 'eye']
         if mask_area == 'full':
             return torch.sum(source_mask[0:2], dim=0, keepdim=True) * saturation
         elif mask_area == 'lip':
             return source_mask[0:1] * saturation
         elif mask_area == 'skin':
-            mask_l_eye = expand_area(source_mask[2:3], self.eyeblur['margin'])  # * source_mask[1:2]
-            mask_r_eye = expand_area(source_mask[3:4], self.eyeblur['margin'])  # * source_mask[1:2]
+            mask_l_eye = expand_area(source_mask[2:3], eyeblur['margin'])  # * source_mask[1:2]
+            mask_r_eye = expand_area(source_mask[3:4], eyeblur['margin'])  # * source_mask[1:2]
             mask_eye = mask_l_eye + mask_r_eye
             # mask_eye = mask_blend(mask_eye, 1.0, source_mask[1:2], blur_size=self.eyeblur['blur_size'])
-            mask_eye = mask_blend(mask_eye, 1.0, blur_size=self.eyeblur['blur_size'])
+            mask_eye = mask_blend(mask_eye, 1.0, blur_size=eyeblur['blur_size'])
             return source_mask[1:2] * (1 - mask_eye) * saturation
         elif mask_area == 'eye':
-            mask_l_eye = expand_area(source_mask[2:3], self.eyeblur['margin'])  # * source_mask[1:2]
-            mask_r_eye = expand_area(source_mask[3:4], self.eyeblur['margin'])  # * source_mask[1:2]
+            mask_l_eye = expand_area(source_mask[2:3], eyeblur['margin'])  # * source_mask[1:2]
+            mask_r_eye = expand_area(source_mask[3:4], eyeblur['margin'])  # * source_mask[1:2]
             mask_eye = mask_l_eye + mask_r_eye
             # mask_eye = mask_blend(mask_eye, saturation, source_mask[1:2], blur_size=self.eyeblur['blur_size'])
-            mask_eye = mask_blend(mask_eye, saturation, blur_size=self.eyeblur['blur_size'])
+            mask_eye = mask_blend(mask_eye, saturation, blur_size=eyeblur['blur_size'])
             return mask_eye
 
     def generate_reference_sample(self, apply_mask=None, source_mask=None, mask_area=None, saturation=1.0):
