@@ -162,6 +162,7 @@ class PositionalEmbedding(nn.Module):
         diff = diff.detach(); diff.requires_grad = False
         return diff
 
+
 class MergeBlock(nn.Module):
     def __init__(self, merge_mode, feature_dim, normalize=True):
         super(MergeBlock, self).__init__()
@@ -170,8 +171,8 @@ class MergeBlock(nn.Module):
         if merge_mode == 'affine':
             self.norm = nn.LayerNorm(feature_dim, elementwise_affine=False) if normalize else nn.Identity()
         else:
-            self.norm = nn.InstanceNorm2d(feature_dim, affine=False) if normalize else nn.Identity()
-        self.norm_r = nn.InstanceNorm2d(feature_dim, affine=False) if normalize else nn.Identity()
+            self.norm = nn.InstanceNorm2d(feature_dim, affine=True) if normalize else nn.Identity()
+        self.norm_r = nn.InstanceNorm2d(feature_dim, affine=True) if normalize else nn.Identity()
         self.actv = nn.LeakyReLU(0.2, inplace=True)
         if merge_mode == 'conv':
             self.conv = nn.Conv2d(2 * feature_dim, feature_dim, kernel_size=3, stride=1, padding=1, bias=False)

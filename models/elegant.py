@@ -14,7 +14,7 @@ class Generator(nn.ModuleDict):
     """Generator. Encoder-Decoder Architecture."""
 
     def __init__(self, conv_dim=64, image_size=256, num_layer_e=2, num_layer_d=1, window_size=16, use_ff=False,
-                 merge_mode='conv', num_head=1, double_encoder=False, **unused):
+                 merge_mode='conv', num_head=1, double_encoder=False, lms_points=68, **unused):
         super(Generator, self).__init__()
 
         self.img_size = image_size
@@ -110,7 +110,12 @@ class Generator(nn.ModuleDict):
         )
         self.add_module('out_conv', layers)
 
-    def get_transfer_input(self, image, mask, diff, lms, is_reference=False):
+        self.fix_grid = self._create_grid(image_size, image_size, lms_points)
+        self.image_size = image_size
+        return
+
+    def get_transfer_input(self, image, mask, lms, is_reference=False):
+        diff = self.fix_grid.to(image.device) - lms.transpose(2, 1).reshape(1, -1, 1, 1)
         feature_size = image.shape[2]
         scale_factor = 1.0
         fea_list, mask_list, diff_list, lms_list = [], [], [], []
@@ -187,7 +192,7 @@ class Generator(nn.ModuleDict):
         fea_c = self['out_conv'](fea_c)
         return fea_c
 
-    def forward(self, c, s, mask_c, mask_s, diff_c, diff_s, lms_c, lms_s):
+    def forward(self, c, s, mask_c, mask_s, lms_c, lms_s):
         """
         c: content, stands for source image. shape: (b, c, h, w)
         s: style, stands for reference image. shape: (b, c, h, w)
@@ -195,6 +200,9 @@ class Generator(nn.ModuleDict):
         diff: (b, d, h, w)
         lms: (b, K, 2)
         """
+        diff_c = self.fix_grid - lms_c.transpose(2, 1).reshape(1, -1, 1, 1)
+        diff_s = self.fix_grid - lms_s.transpose(2, 1).reshape(1, -1, 1, 1)
+
         transfer_input_c = self.get_transfer_input(c, mask_c, diff_c, lms_c)
         transfer_input_s = self.get_transfer_input(s, mask_s, diff_s, lms_s, True)
         attn_out_list = self.get_transfer_output(*transfer_input_c, *transfer_input_s)
@@ -255,55 +263,69 @@ class Generator(nn.ModuleDict):
             apply_mask = torch.ones(1, 1, self.img_size, self.img_size).to(source_mask.device)
         return apply_mask
 
-    def partial_forward(self, source_sample, reference_sample, source_mask, mask_area='lip', saturation=1.0):
-        """
-        Input: a source sample and multiple reference samples
-        Return: PIL.Image, the fused result
-        """
-        device = source_sample[0].device
+    # def forward(self, image, mask, lms, t_image, t_mask, t_lms, apply_mask):
+    #     """
+    #     Input: a source sample and multiple reference samples
+    #     Return: PIL.Image, the fused result
+    #     """
+    #     device = image[0].device
+    #
+    #     # encode source
+    #     source_sample_transfer_input = self.get_transfer_input(image, mask, lms)
+    #
+    #     # encode references
+    #     reference_sample_transfer_input = self.get_transfer_input(t_image, t_mask, t_lms, is_reference=True)
+    #
+    #     # self attention
+    #     source_sample_attn_out_list = self.get_transfer_output(
+    #         *source_sample_transfer_input, *source_sample_transfer_input
+    #     )
+    #
+    #     # full transfer for each reference
+    #     reference_sample_attn_out_list = self.get_transfer_output(
+    #         *source_sample_transfer_input, *reference_sample_transfer_input
+    #     )
+    #
+    #     # fusion
+    #     # if the apply_mask is changed without changing source and references,
+    #     # only the following steps are required
+    #     fused_attn_out_list = []
+    #     for i in range(len(source_sample_attn_out_list)):
+    #         init_attn_out = torch.zeros_like(source_sample_attn_out_list[i], device=device)
+    #         fused_attn_out_list.append(init_attn_out)
+    #     apply_mask_sum = torch.zeros((1, 1, self.img_size, self.img_size), device=device)
+    #
+    #     apply_mask_sum += apply_mask
+    #     for i in range(len(source_sample_attn_out_list)):
+    #         feature_size = reference_sample_attn_out_list[i].shape[2]
+    #         apply_mask = F.interpolate(apply_mask, feature_size, mode='nearest')
+    #         fused_attn_out_list[i] += apply_mask * reference_sample_attn_out_list[i]
+    #
+    #     # self as reference
+    #     source_apply_mask = 1 - apply_mask_sum.clamp(0, 1)
+    #     for i in range(len(source_sample_attn_out_list)):
+    #         feature_size = source_sample_attn_out_list[i].shape[2]
+    #         apply_mask = F.interpolate(source_apply_mask, feature_size, mode='nearest')
+    #         fused_attn_out_list[i] += apply_mask * source_sample_attn_out_list[i]
+    #
+    #     # decode
+    #     result = self.decode(
+    #         source_sample_transfer_input[0], fused_attn_out_list
+    #     )
+    #     return result
 
-        reference_apply_mask = self.generate_reference_sample(source_mask=source_mask, mask_area=mask_area, saturation=saturation)
-
-        # encode source
-        source_sample_transfer_input = self.get_transfer_input(*source_sample)
-
-        # encode references
-        reference_sample_transfer_input = self.get_transfer_input(*reference_sample, is_reference=True)
-
-        # self attention
-        source_sample_attn_out_list = self.get_transfer_output(
-            *source_sample_transfer_input, *source_sample_transfer_input
+    def _create_grid(self, w, h, landmark_points):
+        ys, xs = torch.meshgrid(
+            torch.linspace(
+                0, w - 1,
+                w
+            ),
+            torch.linspace(
+                0, h - 1,
+                h
+            )
         )
-
-        # full transfer for each reference
-        reference_sample_attn_out_list = self.get_transfer_output(
-            *source_sample_transfer_input, *reference_sample_transfer_input
-        )
-
-        # fusion
-        # if the apply_mask is changed without changing source and references,
-        # only the following steps are required
-        fused_attn_out_list = []
-        for i in range(len(source_sample_attn_out_list)):
-            init_attn_out = torch.zeros_like(source_sample_attn_out_list[i], device=device)
-            fused_attn_out_list.append(init_attn_out)
-        apply_mask_sum = torch.zeros((1, 1, self.img_size, self.img_size), device=device)
-
-        apply_mask_sum += reference_apply_mask
-        for i in range(len(source_sample_attn_out_list)):
-            feature_size = reference_sample_attn_out_list[i].shape[2]
-            apply_mask = F.interpolate(reference_apply_mask, feature_size, mode='nearest')
-            fused_attn_out_list[i] += apply_mask * reference_sample_attn_out_list[i]
-
-        # self as reference
-        source_apply_mask = 1 - apply_mask_sum.clamp(0, 1)
-        for i in range(len(source_sample_attn_out_list)):
-            feature_size = source_sample_attn_out_list[i].shape[2]
-            apply_mask = F.interpolate(source_apply_mask, feature_size, mode='nearest')
-            fused_attn_out_list[i] += apply_mask * source_sample_attn_out_list[i]
-
-        # decode
-        result = self.decode(
-            source_sample_transfer_input[0], fused_attn_out_list
-        )
-        return result
+        xs = xs[None].repeat(landmark_points, 1, 1)
+        ys = ys[None].repeat(landmark_points, 1, 1)
+        fix = torch.cat([ys, xs], dim=0)
+        return fix.unsqueeze(0)

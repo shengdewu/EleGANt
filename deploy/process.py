@@ -121,6 +121,18 @@ class PreProcess:
         lms = futils.dlib.landmarks_np(image, face) * self.img_size / h  # scale to fit self.img_size
         # lms: narray, the position of 68 key points, (68 ,2)
         lms = torch.IntTensor(lms.round()).clamp_max_(self.img_size - 1)
+
+        dis_img = image.copy()
+        lms2 = lms / self.img_size * h
+        for i in range(lms2.shape[0]):
+            if i < 61 or i > 64:
+                continue
+            y, x = lms2[i].cpu().numpy().tolist()
+            cv2.circle(dis_img, (int(x), int(y)), 1, (255, 0, 0), 2)
+            cv2.putText(dis_img, f'{i}', (int(x), int(y)), 0, 0.5, [225, 255, 255], thickness=1, lineType=cv2.LINE_AA)
+
+        cv2.imwrite('/mnt/sda1/valid.output/makeup/elgant-test/lms1.png', dis_img)
+
         # distinguish upper and lower lips
         lms[61:64, 0] -= 1
         lms[65:68, 0] += 1
@@ -129,13 +141,18 @@ class PreProcess:
                 lms[61 + i, 0] -= 1
                 lms[67 - i, 0] += 1
 
-        image = cv2.resize(image, dsize=(self.img_size, self.img_size), interpolation=cv2.INTER_AREA)
+        dis_img = image.copy()
+        lms2 = lms / self.img_size * h
+        for i in range(lms2.shape[0]):
+            if i < 61 or i > 64:
+                continue
+            y, x = lms2[i].cpu().numpy().tolist()
+            cv2.circle(dis_img, (int(x), int(y)), 1, (255, 0, 0), 2)
+            cv2.putText(dis_img, f'{i}', (int(x), int(y)), 0, 0.5, [225, 255, 255], thickness=1, lineType=cv2.LINE_AA)
 
-        # dis_img = image.copy()
-        # for i in range(lms.shape[0]):
-        #     y, x = lms[i].cpu().numpy().tolist()
-        #     cv2.circle(dis_img, (x, y), 1, (255, 0, 0), 2)
-        # cv2.imwrite('/mnt/sda1/valid.output/makeup/elgant-base4/demo/lms.png', dis_img)
+        cv2.imwrite('/mnt/sda1/valid.output/makeup/elgant-test/lms2.png', dis_img)
+
+        image = cv2.resize(image, dsize=(self.img_size, self.img_size), interpolation=cv2.INTER_AREA)
 
         return [image, mask, lms], face_on_image, crop_face
 
@@ -143,7 +160,7 @@ class PreProcess:
         image = self.transform(image)
         mask = self.mask_process(mask)
         diff = self.diff_process(lms)
-        return [image, mask, diff, lms]
+        return [image, mask, lms]
 
     def __call__(self, image: np.ndarray, is_crop=True):
         source, face_on_image, crop_face = self.preprocess(image, is_crop)

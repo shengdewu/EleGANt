@@ -6,19 +6,31 @@ import itertools
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import deploy.custom_op_reg as custom_ops
 # TF32 is not enough, require FP32
 # Disable automatic TF32 since Pytorch 1.7
 torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 
+# the some operator not support by onnx
+use_custom = False
+
+graid_sample_inter_mode = dict(bilinear=0, nearest=1, bicubic=2)
+
+
 def grid_sample(input, grid, mode='bilinear', canvas=None):
-    output = F.grid_sample(input, grid, mode=mode, align_corners=True)
+    if use_custom:
+        output = custom_ops.grid_sampler(input, grid, graid_sample_inter_mode.get(mode, 0), 0, True)
+    else:
+        output = F.grid_sample(input, grid, mode=mode, align_corners=True)
     if canvas is None:
         return output
     else:
         input_mask = input.data.new(input.size()).fill_(1)
-        output_mask = F.grid_sample(input_mask, grid, mode='nearest', align_corners=True)
+        if use_custom:
+            output_mask = custom_ops.grid_sampler(input_mask, grid, 1, 0, True)
+        else:
+            output_mask = F.grid_sample(input_mask, grid, mode='nearest', align_corners=True)
         padded_output = output * output_mask + canvas * (1 - output_mask)
         return padded_output
 
@@ -40,7 +52,7 @@ def compute_partial_repr(input_points, control_points):
     return repr_matrix
 
 
-# compute \Delta_c^-1
+# compute \Delta_c^-1 onnx not support inverse
 def bulid_delta_inverse(target_control_points):
     '''
     target_control_points: (N, 2)
@@ -54,8 +66,11 @@ def bulid_delta_inverse(target_control_points):
     forward_kernel[:N, -2:].copy_(target_control_points)
     forward_kernel[-2:, :N].copy_(target_control_points.transpose(0, 1))
     # compute inverse matrix
-    inverse_kernel = torch.inverse(forward_kernel)
-    return inverse_kernel
+    if use_custom:
+        inverse_kernel = custom_ops.inverse(forward_kernel)
+    else:
+        inverse_kernel = torch.inverse(forward_kernel)
+    return inverse_kernel.to(forward_kernel.device)
 
 
 # create target coordinate matrix
